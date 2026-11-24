@@ -27,22 +27,11 @@ jobs:
       - name: Copy www to assets (fix ERR_FILE_NOT_FOUND)
         run: |
           ASSETS_DIR=""
-          if [ -d "app/src/main/assets" ]; then
-            ASSETS_DIR="app/src/main/assets"
-          elif [ -d "app/src/main" ]; then
-            mkdir -p app/src/main/assets
-            ASSETS_DIR="app/src/main/assets"
+          if [ -d "app/src/main/assets" ]; then ASSETS_DIR="app/src/main/assets"
+          elif [ -d "app/src/main" ]; then mkdir -p app/src/main/assets && ASSETS_DIR="app/src/main/assets"
           fi
-          if [ -d "www" ]; then
-            mkdir -p $ASSETS_DIR/www
-            cp -r www/* $ASSETS_DIR/www/ || true
-            echo "Copied root www/ to $ASSETS_DIR/www/"
-          elif [ -d "app/www" ]; then
-            mkdir -p $ASSETS_DIR/www
-            cp -r app/www/* $ASSETS_DIR/www/ || true
-            echo "Copied app/www/ to $ASSETS_DIR/www/"
-          else
-            echo "Warning: no www/ found, asset loading may still fail on device"
+          if [ -d "www" ]; then mkdir -p $ASSETS_DIR/www && cp -r www/* $ASSETS_DIR/www/ || true
+          elif [ -d "app/www" ]; then mkdir -p $ASSETS_DIR/www && cp -r app/www/* $ASSETS_DIR/www/ || true
           fi
           ls -R $ASSETS_DIR 2>/dev/null || true
 
@@ -55,23 +44,19 @@ jobs:
 
       - name: Find gradlew or use Gradle 8.5
         run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            echo "CMD=./gradlew" >> $GITHUB_ENV
-          elif [ -f "./app/gradlew" ]; then
-            chmod +x ./app/gradlew
-            echo "CMD=./app/gradlew" >> $GITHUB_ENV
-          else
-            echo "CMD=gradle" >> $GITHUB_ENV
+          if [ -f "./gradlew" ]; then chmod +x ./gradlew && echo "CMD=./gradlew" >> $GITHUB_ENV
+          elif [ -f "./app/gradlew" ]; then chmod +x ./app/gradlew && echo "CMD=./app/gradlew" >> $GITHUB_ENV
+          else echo "CMD=gradle" >> $GITHUB_ENV
           fi
 
-      - name: Build Debug APK (with mirror & retry)
+      - name: Build Debug APK (Force stacktrace & clean)
         run: |
           mkdir -p ~/.gradle
           echo "allprojects { repositories { maven { url 'https://maven.aliyun.com/repository/public' } mavenCentral() google() } }" >> ~/.gradle/init.gradle
           set +e
           for i in 1 2 3; do
-            $CMD assembleDebug
+            $CMD --stop 2>/dev/null || true
+            $CMD clean assembleDebug --no-daemon --stacktrace --info
             if [ $? -eq 0 ]; then break; fi
             echo "Build attempt $i failed, retrying in 15s..."
             sleep 15
@@ -83,11 +68,9 @@ jobs:
         run: |
           echo "=== Searching all .apk files in workspace ==="
           find . -name "*.apk" -type f 2>/dev/null || true
-          echo "=== Listing app/build/outputs (if exists) ==="
-          ls -R app/build/outputs 2>/dev/null || true
           APK_PATH=$(find . -name "*.apk" -type f | head -n 1)
           if [ -z "$APK_PATH" ]; then
-            echo "ERROR: No APK found anywhere!"
+            echo "ERROR: No APK found! Build definitely failed."
             exit 1
           fi
           echo "Found APK at: $APK_PATH"
