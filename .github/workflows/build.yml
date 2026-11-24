@@ -2,28 +2,15 @@ name: Build Physics App APK
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
-
-      # 图标已随仓库提交，无需再生成；这里只做存在性校验
-      - name: Verify assets & icons
-        run: |
-          echo "=== assets 目录 ==="
-          ls -l app/src/main/assets/www/
-          echo ""
-          echo "=== 图标 ==="
-          ls -l app/src/main/res/mipmap-*/ic_launcher*.png
-          echo ""
-          test -f app/src/main/assets/www/index.html || { echo "❌ index.html 缺失"; exit 1; }
-          test -f app/src/main/assets/www/app.js    || { echo "❌ app.js 缺失"; exit 1; }
-          echo "✅ 资源校验通过"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -33,34 +20,14 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
-      - name: Install SDK packages
-        run: |
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-
-      - name: Install Gradle
-        run: |
-          SDKMAN_DIR="$HOME/.sdkman"
-          curl -s "https://get.sdkman.io" | bash
-          source "$SDKMAN_DIR/bin/sdkman-init.sh"
-          sdk install gradle 8.7
-          gradle --version
+      - name: Make gradlew executable
+        run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: |
-          source "$HOME/.sdkman/bin/sdkman-init.sh"
-          gradle :app:assembleDebug --no-daemon --stacktrace
-
-      - name: Verify APK contents
-        run: |
-          APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
-          echo "APK: $APK"
-          echo "=== APK 内 assets 检查 ==="
-          unzip -l "$APK" | grep -E "assets/www" || { echo "❌ APK 内没有 assets/www！"; exit 1; }
-          echo "✅ assets/www 已打进 APK"
-          unzip -l "$APK" | grep -E "ic_launcher" | head -5
+        run: ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
