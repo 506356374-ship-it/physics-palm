@@ -39,22 +39,26 @@ jobs:
           echo "/opt/gradle/gradle-8.5/bin" >> $GITHUB_PATH
           gradle -v
 
-      - name: Clean bad init.gradle & Build Debug APK
+      - name: Clean bad files & Build Debug APK
         run: |
-          # 彻底清理旧的错误 init.gradle，不再用镜像注入，避免 mavenCentral() 作用域报错
+          # 彻底清理旧注入，不写 init.gradle
           rm -rf ~/.gradle/init.gradle ~/.gradle/caches/build-cache-1
           
-          # 强制用系统 Gradle 8.5（绕过项目自带老 gradlew，防 JDK17 冲突）
+          # 备份原 build.gradle（若存在）
+          if [ -f "build.gradle" ]; then
+            cp build.gradle build.gradle.bak
+            echo "Backed up build.gradle"
+          fi
+          
+          # 用纯 URL 平铺注入（无 maven{} 闭包，无 mavenCentral() 简写，彻底避坑）
+          TMP_HEAD=$(mktemp)
+          echo 'allprojects{repositories{url "https://maven.aliyun.com/repository/public"; url "https://repo.maven.apache.org/maven2"; url "https://dl.google.com/android/maven2"}}' > "$TMP_HEAD"
+          cat build.gradle >> "$TMP_HEAD"
+          mv "$TMP_HEAD" build.gradle
+          echo "Injected repos (flat URLs) into build.gradle"
+          
           CMD="gradle"
           echo "Using: $CMD | Java: $(java -version 2>&1 | head -n 1)"
-          
-          # 如果项目根目录有 build.gradle，临时注入仓库（纯 URL 平级，无 mavenCentral() 简写坑）
-          if [ -f "build.gradle" ]; then
-            echo "Backing up build.gradle..."
-            cp build.gradle build.gradle.bak
-            # 在 allprojects 前插入仓库配置（用纯 URL，不调 mavenCentral() 方法）
-            sed -i '1i allprojects { repositories { maven { url "https://maven.aliyun.com/repository/public" } maven { url "https://repo.maven.apache.org/maven2" } maven { url "https://dl.google.com/android/maven2" } } }' build.gradle
-          fi
           
           set +e
           $CMD --stop 2>/dev/null || true
@@ -62,7 +66,7 @@ jobs:
           BUILD_STATUS=$?
           set -e
           
-          # 恢复原 build.gradle（不污染代码）
+          # 恢复原 build.gradle
           if [ -f "build.gradle.bak" ]; then mv build.gradle.bak build.gradle; fi
           
           if [ $BUILD_STATUS -ne 0 ]; then
