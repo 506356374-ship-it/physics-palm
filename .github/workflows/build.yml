@@ -12,7 +12,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17 (Required for SDK setup & Gradle 9.x / AGP)
+      - name: Set up JDK 17 (Required for SDK & Gradle 8.7)
         uses: actions/setup-java@v5
         with:
           java-version: '17'
@@ -23,6 +23,13 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
+      - name: Install Gradle 8.7 (Override project's Gradle 9.x for old AGP compat)
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q gradle-8.7-bin.zip -d /opt/gradle
+          echo "/opt/gradle/gradle-8.7/bin" >> $GITHUB_PATH
+          gradle -v
+
       - name: Copy www to assets
         run: |
           if [ -d "www" ]; then
@@ -32,24 +39,14 @@ jobs:
           fi
           ls -R app/src/main/assets 2>/dev/null || true
 
-      - name: Build Debug APK (Use project gradlew, NO repo injection)
+      - name: Build Debug APK (Force Gradle 8.7, NO repo injection)
         run: |
-          # 彻底清理旧注入，不写 init.gradle，不改 build.gradle，不降级 JDK
+          # 彻底清理旧注入，不写 init.gradle，不改 build.gradle，不用项目 gradlew(9.x)
           rm -rf ~/.gradle/init.gradle ~/.gradle/caches/build-cache-1
           if [ -f "build.gradle.bak" ]; then mv build.gradle.bak build.gradle; fi
           
-          # 优先用项目自带 gradlew（Gradle 9.9.1，需 JDK17）
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            CMD="./gradlew"
-          elif [ -f "./app/gradlew" ]; then
-            chmod +x ./app/gradlew
-            CMD="./app/gradlew"
-          else
-            CMD="gradle"
-          fi
-          
-          echo "Using: $CMD | Java: $(java -version 2>&1 | head -n 1)"
+          CMD="gradle"
+          echo "Using: $CMD ($(gradle --version | grep Gradle)) | Java: $(java -version 2>&1 | head -n 1)"
           
           set +e
           $CMD --stop 2>/dev/null || true
