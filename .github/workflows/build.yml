@@ -17,67 +17,48 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
-      - name: Copy www to assets (fix ERR_FILE_NOT_FOUND)
+      - name: Copy www to assets
         run: |
-          ASSETS_DIR=""
-          if [ -d "app/src/main/assets" ]; then ASSETS_DIR="app/src/main/assets"
-          elif [ -d "app/src/main" ]; then mkdir -p app/src/main/assets && ASSETS_DIR="app/src/main/assets"
+          if [ -d "www" ]; then
+            mkdir -p app/src/main/assets/www
+            cp -r www/* app/src/main/assets/www/
+            echo "Copied www/ to assets/www/"
           fi
-          if [ -d "www" ]; then mkdir -p $ASSETS_DIR/www && cp -r www/* $ASSETS_DIR/www/ || true
-          elif [ -d "app/www" ]; then mkdir -p $ASSETS_DIR/www && cp -r app/www/* $ASSETS_DIR/www/ || true
-          fi
-          ls -R $ASSETS_DIR 2>/dev/null || true
+          ls -R app/src/main/assets 2>/dev/null || true
 
-      - name: Install Gradle 8.5 (Compatible with old project)
+      - name: Install Gradle 8.5
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip -d /opt/gradle
           echo "/opt/gradle/gradle-8.5/bin" >> $GITHUB_PATH
-          gradle -v
 
-      - name: Find gradlew or use Gradle 8.5
+      - name: Build Debug APK
         run: |
-          if [ -f "./gradlew" ]; then chmod +x ./gradlew && echo "CMD=./gradlew" >> $GITHUB_ENV
-          elif [ -f "./app/gradlew" ]; then chmod +x ./app/gradlew && echo "CMD=./app/gradlew" >> $GITHUB_ENV
-          else echo "CMD=gradle" >> $GITHUB_ENV
-          fi
-
-      - name: Build Debug APK (Force stacktrace & clean)
-        run: |
+          rm -rf ~/.gradle/init.gradle
           mkdir -p ~/.gradle
-          echo "allprojects { repositories { maven { url 'https://maven.aliyun.com/repository/public' } mavenCentral() google() } }" >> ~/.gradle/init.gradle
-          set +e
-          for i in 1 2 3; do
-            $CMD --stop 2>/dev/null || true
-            $CMD clean assembleDebug --no-daemon --stacktrace --info
-            if [ $? -eq 0 ]; then break; fi
-            echo "Build attempt $i failed, retrying in 15s..."
-            sleep 15
-          done
-          set -e
+          echo 'allprojects { repositories { maven { url "https://maven.aliyun.com/repository/public" } mavenCentral() google() } }' >> ~/.gradle/init.gradle
+          gradle clean assembleDebug --no-daemon --stacktrace
 
-      - name: Locate APK (Fuzzy match *.apk)
-        id: locate
+      - name: Find and Upload APK
         run: |
-          echo "=== Searching all .apk files in workspace ==="
-          find . -name "*.apk" -type f 2>/dev/null || true
-          APK_PATH=$(find . -name "*.apk" -type f | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            echo "ERROR: No APK found! Build definitely failed."
+          APK=$(find . -name "*.apk" -type f | head -n 1)
+          if [ -z "$APK" ]; then
+            echo "ERROR: No APK found!"
+            find . -name "*.apk" 2>/dev/null || true
             exit 1
           fi
-          echo "Found APK at: $APK_PATH"
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "Found: $APK"
+          mkdir -p /tmp/apk-out
+          cp "$APK" /tmp/apk-out/physics-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: physics-web-apk
-          path: ${{ steps.locate.outputs.apk_path }}
+          path: /tmp/apk-out/physics-debug.apk
