@@ -46,7 +46,14 @@ jobs:
           fi
           ls -R $ASSETS_DIR 2>/dev/null || true
 
-      - name: Find gradlew or use Gradle
+      - name: Install Gradle 8.5 (Compatible with old project)
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+          unzip -q gradle-8.5-bin.zip -d /opt/gradle
+          echo "/opt/gradle/gradle-8.5/bin" >> $GITHUB_PATH
+          gradle -v
+
+      - name: Find gradlew or use Gradle 8.5
         run: |
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
@@ -58,13 +65,13 @@ jobs:
             echo "CMD=gradle" >> $GITHUB_ENV
           fi
 
-      - name: Build Debug APK (with mirror & verbose)
+      - name: Build Debug APK (with mirror & retry)
         run: |
           mkdir -p ~/.gradle
           echo "allprojects { repositories { maven { url 'https://maven.aliyun.com/repository/public' } mavenCentral() google() } }" >> ~/.gradle/init.gradle
           set +e
           for i in 1 2 3; do
-            $CMD assembleDebug --stacktrace --info
+            $CMD assembleDebug
             if [ $? -eq 0 ]; then break; fi
             echo "Build attempt $i failed, retrying in 15s..."
             sleep 15
