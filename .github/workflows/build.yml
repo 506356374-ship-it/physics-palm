@@ -12,16 +12,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 11 (Downgrade for old Android/Cordova)
+      - name: Set up JDK 17 (For Android SDK licenses setup)
         uses: actions/setup-java@v5
         with:
-          java-version: '11'
+          java-version: '17'
           distribution: 'temurin'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      - name: Set up JDK 11 (For old Cordova/AGP compilation)
+        uses: actions/setup-java@v5
+        with:
+          java-version: '11'
+          distribution: 'temurin'
 
       - name: Copy www to assets
         run: |
@@ -34,11 +40,11 @@ jobs:
 
       - name: Build Debug APK (Use project gradlew, NO repo injection)
         run: |
-          # 彻底清理所有旧注入，不写 init.gradle，不改 build.gradle
+          # 彻底清理旧注入，不写 init.gradle，不改 build.gradle
           rm -rf ~/.gradle/init.gradle ~/.gradle/caches/build-cache-1
           if [ -f "build.gradle.bak" ]; then mv build.gradle.bak build.gradle; fi
           
-          # 优先用项目自带 gradlew（最兼容老项目），否则用系统 gradle
+          # 优先用项目自带 gradlew（最兼容老项目）
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
             CMD="./gradlew"
