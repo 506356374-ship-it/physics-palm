@@ -23,11 +23,23 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
-      - name: Make gradlew executable
-        run: chmod +x gradlew
+      - name: Find gradlew or use Gradle
+        run: |
+          if [ -f "./gradlew" ]; then
+            echo "Found gradlew at root"
+            chmod +x ./gradlew
+            echo "CMD=./gradlew" >> $GITHUB_ENV
+          elif [ -f "./app/gradlew" ]; then
+            echo "Found gradlew in app/"
+            chmod +x ./app/gradlew
+            echo "CMD=./app/gradlew" >> $GITHUB_ENV
+          else
+            echo "gradlew not found, using system gradle"
+            echo "CMD=gradle" >> $GITHUB_ENV
+          fi
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: $CMD assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
